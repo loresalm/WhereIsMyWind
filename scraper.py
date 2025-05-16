@@ -9,6 +9,9 @@ import tempfile
 import os
 import pandas as pd 
 import re
+import firebase_admin
+from firebase_admin import credentials, firestore
+from datetime import datetime, timedelta
 
 
 def extract_tooltip_data(tooltip_text):
@@ -45,19 +48,20 @@ def extract_tooltip_data(tooltip_text):
     return data
 
 
-def get_wind_banner(driver, x_start, x_offset):
+def get_wind_banner(driver, x_start, x_offset, debug):
     # Move to the center of the chart
     actions = ActionChains(driver)
     actions.move_to_element_with_offset(wind_chart, x_offset + x_start, 0).click().perform() 
-    print("Moved to center of wind chart")
+    print(f"Moved to {x_offset + x_start} of wind chart")
 
     # Wait for tooltip to appear
     time.sleep(1)
 
-    # Take a screenshot
-    os.makedirs("screenshots", exist_ok=True)
-    driver.save_screenshot(f"screenshots/wind_chart_{x_offset}.png")
-    print("Screenshot saved")
+    if debug:
+        # Take a screenshot
+        os.makedirs("screenshots", exist_ok=True)
+        driver.save_screenshot(f"screenshots/wind_chart_{x_offset}.png")
+        print("Screenshot saved")
     data = {'Day': None,
             'Time': None,
             'Wind Direction': None,
@@ -78,6 +82,35 @@ def get_wind_banner(driver, x_start, x_offset):
     return data
 
 
+# Initialize Firebase Firestore
+def initialize_firestore():
+    cred = credentials.Certificate("serviceAccountKey.json")  # Replace with your JSON file
+    firebase_admin.initialize_app(cred)
+    db = firestore.client()
+    return db
+
+
+def save_to_firestore(db, all_wind_data, data_date, location="wannsee"):
+    try:
+        # Create a document with the date as ID
+        doc_ref = db.collection("wind_data").document(data_date)
+
+        # Prepare the data to be stored
+        data_to_store = {
+            "location": location,
+            "date": data_date,
+            "records": all_wind_data,  # This stores all 24 records as an array
+            "timestamp": datetime.now()
+        }
+
+        # Add data to Firestore
+        doc_ref.set(data_to_store)
+
+        print(f"Data for {data_date} saved to Firestore with {len(all_wind_data)} records!")
+    except Exception as e:
+        print(f"Error saving to Firestore: {e}")
+
+debug = False 
 # Selenium setup
 options = Options()
 options.add_argument('--headless')
@@ -92,8 +125,12 @@ options.add_argument(f"--user-data-dir={user_data_dir}")
 # Explicitly setting the ChromeDriver path
 driver = webdriver.Chrome(options=options)
 
+yesterday = datetime.now() - timedelta(days=1)
+data_date = yesterday.strftime('%Y-%m-%d')
+# data_date = "2025-05-09"
+
 # Open the webpage
-driver.get('https://www.windfinder.com/report/wannsee/2025-05-14')
+driver.get(f'https://www.windfinder.com/report/wannsee/{data_date}')
 
 # Wait for the page to fully load
 time.sleep(5)
@@ -129,18 +166,32 @@ try:
                  'Wind Direction': [],
                  'Wind Speed (kts)': [],
                  'Wind Gusts (kts)': []}
+    wind_data_db = []
     for i in range(24):
-        data = get_wind_banner(driver, x_start, x_offset)
-        for key, value in data.items():
-            wind_data[key].append(value)
+        data = get_wind_banner(driver, x_start, x_offset, debug)
+        wind_data_db.append(data)
+        if debug:
+            for key, value in data.items():
+                wind_data[key].append(value)
         x_offset += 26
-    wind_df = pd.DataFrame(wind_data)
-    wind_df.to_csv('wind_data.csv', index=False)
+
+    if debug:
+        wind_df = pd.DataFrame(wind_data)
+        wind_df.to_csv('wind_data.csv', index=False)
+    # Initialize and save data
+    db = initialize_firestore()
+    save_to_firestore(db, wind_data_db, data_date, location="wannsee")
 
 except Exception as e:
     print(f"Error in main script: {e}")
-    
+
 finally:
     # Close the driver
     driver.quit()
     print("Script completed.")
+
+
+
+
+
+
