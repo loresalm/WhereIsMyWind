@@ -8,6 +8,74 @@ from selenium.webdriver.common.action_chains import ActionChains
 import tempfile
 import os
 import pandas as pd 
+import re
+
+
+def extract_tooltip_data(tooltip_text):
+    data = {}
+    # Extract day and time (keep time as a string)
+    time_match = re.search(r'([A-Za-z]+),\s+(\d+:\d+)', tooltip_text)
+    if time_match:
+        data['Day'] = time_match.group(1)  # e.g., "Wednesday"
+        data['Time'] = time_match.group(2)  # e.g., "06:00" (as string)
+    # Extract wind direction (keep as string)
+    dir_match = re.search(r'Wind direction:\s+(\d+°\s*/\s*[A-Z]+)', tooltip_text)
+    if dir_match:
+        data['Wind Direction'] = dir_match.group(1).strip()  # e.g., "280° / W"
+    # Extract wind speed (convert to float)
+    speed_match = re.search(r'Wind speed:\s+([\d.]+)\s*kts', tooltip_text)
+    if speed_match:
+        try:
+            # Remove non-breaking space (\u202f) and convert to float
+            speed_str = speed_match.group(1).replace('\u202f', '').strip()
+            data['Wind Speed (kts)'] = float(speed_str)  # e.g., 5.2
+        except ValueError:
+            print(f"Could not parse wind speed: {speed_match.group(1)}")
+    
+    # Extract wind gusts (convert to float)
+    gusts_match = re.search(r'Wind gusts:\s+([\d.]+)\s*kts', tooltip_text)
+    if gusts_match:
+        try:
+            # Remove non-breaking space (\u202f) and convert to float
+            gusts_str = gusts_match.group(1).replace('\u202f', '').strip()
+            data['Wind Gusts (kts)'] = float(gusts_str)  # e.g., 11.5
+        except ValueError:
+            print(f"Could not parse wind gusts: {gusts_match.group(1)}")
+
+    return data
+
+
+def get_wind_banner(driver, x_start, x_offset):
+    # Move to the center of the chart
+    actions = ActionChains(driver)
+    actions.move_to_element_with_offset(wind_chart, x_offset + x_start, 0).click().perform() 
+    print("Moved to center of wind chart")
+
+    # Wait for tooltip to appear
+    time.sleep(1)
+
+    # Take a screenshot
+    os.makedirs("screenshots", exist_ok=True)
+    driver.save_screenshot(f"screenshots/wind_chart_{x_offset}.png")
+    print("Screenshot saved")
+    data = {'Day': None,
+            'Time': None,
+            'Wind Direction': None,
+            'Wind Speed (kts)': None,
+            'Wind Gusts (kts)': None}
+    try:
+        tooltip = driver.find_element(By.CSS_SELECTOR, ".chart-tooltip")
+        tooltip_text = tooltip.text
+        print("------------------------")
+        print("Tooltip content:")
+        print(tooltip_text)
+        data = extract_tooltip_data(tooltip_text)
+        print("Extracted content:")
+        print(data)
+        print("------------------------")
+    except Exception as e:
+        print(f"no tooltip found {e}")
+    return data
 
 
 # Selenium setup
@@ -42,101 +110,32 @@ try:
 except Exception as e:
     print(f"No cookie banner found or already accepted: {e}")
 
-# Scroll to the bottom to ensure the plot is visible
-# driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-# time.sleep(2)
 # Locate the wind chart
 try:
     wind_chart = driver.find_element(By.ID, 'entrypoint-wind-chart')
+    size = wind_chart.size
+    location = wind_chart.location
+    x_loc = location['x']
+    wchar = size['width']
     print("Wind chart found!")
+    print(f"width char: {wchar}")
+    print(f"x loaction char: {x_loc}")
     driver.execute_script("arguments[0].scrollIntoView(true);", wind_chart)
     time.sleep(1)
-    
-    # Move to the center of the chart
-    actions = ActionChains(driver)
-    actions.move_to_element(wind_chart).perform()
-    print("Moved to center of wind chart")
-    
-    # Wait for tooltip to appear
-    time.sleep(1)
-    
-    # Take a screenshot
-    os.makedirs("screenshots", exist_ok=True)
-    driver.save_screenshot("screenshots/wind_chart_center.png")
-    print("Screenshot saved")
-    
-    # Try different selectors for the tooltip element
-    tooltip_selectors = [
-        "div.tooltip", 
-        "div.chartTooltip", 
-        "div[role='tooltip']",
-        ".tooltip-container",
-        "#chart-tooltip",
-        ".chart-tooltip",
-        ".wf-tooltip"
-    ]
-    
-    tooltip_found = False
-    
-    # Try each selector
-    for selector in tooltip_selectors:
-        try:
-            tooltip = driver.find_element(By.CSS_SELECTOR, selector)
-            tooltip_text = tooltip.text
-            print(f"Found tooltip with selector: {selector}")
-            print("Tooltip content:")
-            print(tooltip_text)
-            tooltip_found = True
-            break
-        except:
-            continue
-    
-    # If none of the predefined selectors worked, try finding by tooltip content
-    if not tooltip_found:
-        print("Trying to find tooltip by content...")
-        try:
-            # Try to find elements containing wind information
-            elements = driver.find_elements(By.XPATH, "//*[contains(text(), 'Wind direction') or contains(text(), 'Wind speed')]")
-            
-            if elements:
-                # Find the parent container of the tooltip
-                for element in elements:
-                    # Go up to potential container element
-                    parent = element
-                    for _ in range(3):  # Try up to 3 levels up
-                        if parent:
-                            parent = parent.find_element(By.XPATH, "..")
-                            print(f"Parent element text: {parent.text}")
-                            if "Wind direction" in parent.text and "Wind speed" in parent.text:
-                                print("Found tooltip container by content!")
-                                print("Tooltip content:")
-                                print(parent.text)
-                                tooltip_found = True
-                                break
-                    if tooltip_found:
-                        break
-        except Exception as e:
-            print(f"Error finding tooltip by content: {e}")
-    
-    # If still not found, dump the page HTML for inspection
-    if not tooltip_found:
-        print("Could not find tooltip element. Dumping page HTML for inspection.")
-        with open("page_dump.html", "w", encoding="utf-8") as f:
-            f.write(driver.page_source)
-        print("Page source dumped to page_dump.html")
-        
-        # Also try printing all visible text on the page to find the tooltip
-        try:
-            print("All visible text elements on page:")
-            text_elements = driver.find_elements(By.XPATH, "//*[text()]")
-            for i, elem in enumerate(text_elements[:30]):  # Print first 30 text elements
-                try:
-                    if elem.is_displayed():
-                        print(f"Text element {i}: {elem.text[:100]}...")  # Print first 100 chars
-                except:
-                    pass
-        except Exception as e:
-            print(f"Error listing text elements: {e}")
+    x_start = -300
+    x_offset = 0
+    wind_data = {'Day': [],
+                 'Time': [],
+                 'Wind Direction': [],
+                 'Wind Speed (kts)': [],
+                 'Wind Gusts (kts)': []}
+    for i in range(24):
+        data = get_wind_banner(driver, x_start, x_offset)
+        for key, value in data.items():
+            wind_data[key].append(value)
+        x_offset += 26
+    wind_df = pd.DataFrame(wind_data)
+    wind_df.to_csv('wind_data.csv', index=False)
 
 except Exception as e:
     print(f"Error in main script: {e}")
