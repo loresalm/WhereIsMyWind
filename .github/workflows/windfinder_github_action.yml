@@ -1,40 +1,45 @@
-name: Daily Windfinder Data Collection
+name: Daily Wind Data Scraper
 
 on:
   schedule:
-    - cron: '0 5 * * *' # Runs every day at 5 AM UTC
+    # Runs daily at 1:00 AM UTC (adjust time as needed)
+    - cron: '0 1 * * *'
+  
+  # Allow manual triggering
   workflow_dispatch:
 
 jobs:
-  build:
+  scrape-wind-data:
     runs-on: ubuntu-latest
-
+    
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3
-
+      uses: actions/checkout@v4
+    
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.9'
-
+        python-version: '3.11'
+    
     - name: Install dependencies
       run: |
-        pip install -r requirements.txt
-        pip install selenium firebase-admin pandas
-
-    - name: Set up ChromeDriver
-      uses: browser-actions/setup-chromedriver@v2
+        pip install --upgrade pip
+        pip install selenium firebase-admin
+    
+    - name: Set up Chrome
+      uses: browser-actions/setup-chrome@latest
       with:
-        chromedriver-version: 'latest'
-
-    - name: Download Chrome Browser
-      uses: browser-actions/setup-chrome@v2
-      with:
-        chrome-version: 'latest'
-
-    - name: Run Windfinder Script
+        chrome-version: stable
+    
+    - name: Install ChromeDriver
+      uses: nanasess/setup-chromedriver@v2
+    
+    - name: Run wind data scraper
       env:
         FIREBASE_CREDENTIALS: ${{ secrets.FIREBASE_CREDENTIALS }}
       run: |
         python github_action_windfinder.py
+    
+    - name: Log completion
+      run: |
+        echo "Wind data scraping completed at $(date)"
