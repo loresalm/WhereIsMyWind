@@ -1,4 +1,4 @@
-import time
+
 from selenium import webdriver   # type: ignore
 from selenium.webdriver.common.by import By  # type: ignore
 from selenium.webdriver.chrome.options import Options  # type: ignore
@@ -9,6 +9,7 @@ import tempfile
 import os
 import pandas as pd  # type: ignore
 import re
+import time
 import firebase_admin  # type: ignore
 from firebase_admin import credentials, firestore  # type: ignore
 from datetime import datetime, timedelta
@@ -131,7 +132,7 @@ driver = webdriver.Chrome(options=options)
 
 yesterday = datetime.now() - timedelta(days=1)
 data_date = yesterday.strftime('%Y-%m-%d')
-data_date = "2025-05-17"
+# data_date = "2025-05-17"
 
 # Open the webpage
 driver.get(f'https://www.windfinder.com/report/wannsee/{data_date}')

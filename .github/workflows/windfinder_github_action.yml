@@ -1,0 +1,40 @@
+name: Daily Windfinder Data Collection
+
+on:
+  schedule:
+    - cron: '0 5 * * *' # Runs every day at 5 AM UTC
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+        pip install selenium firebase-admin pandas
+
+    - name: Set up ChromeDriver
+      uses: browser-actions/setup-chromedriver@v2
+      with:
+        chromedriver-version: 'latest'
+
+    - name: Download Chrome Browser
+      uses: browser-actions/setup-chrome@v2
+      with:
+        chrome-version: 'latest'
+
+    - name: Run Windfinder Script
+      env:
+        FIREBASE_CREDENTIALS: ${{ secrets.FIREBASE_CREDENTIALS }}
+      run: |
+        python github_action_windfinder.py

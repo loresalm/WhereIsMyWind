@@ -182,3 +182,8 @@ cython_debug/
 *.html
 
 serviceAccountKey.json
+*.gpg
+__pycache__/
+*.pyc
+.env
+screenshots/
