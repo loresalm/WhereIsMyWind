@@ -30,6 +30,24 @@ jobs:
       uses: browser-actions/setup-chrome@latest
       with:
         chrome-version: stable
+        
+    - name: Setup Chrome dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          fonts-liberation \
+          libasound2 \
+          libatk-bridge2.0-0 \
+          libatspi2.0-0 \
+          libdrm2 \
+          libgtk-3-0 \
+          libgtk-4-1 \
+          libnspr4 \
+          libnss3 \
+          libxcomposite1 \
+          libxdamage1 \
+          libxrandr2 \
+          xvfb
     
     - name: Install ChromeDriver
       uses: nanasess/setup-chromedriver@v2
@@ -37,9 +55,13 @@ jobs:
     - name: Run wind data scraper
       env:
         FIREBASE_CREDENTIALS: ${{ secrets.FIREBASE_CREDENTIALS }}
+        DISPLAY: :99
       run: |
+        # Start virtual display
+        Xvfb :99 -ac -screen 0 1920x1080x24 &
+        sleep 3
         python github_action_windfinder.py
-      timeout-minutes: 15
+      timeout-minutes: 20
     
     - name: Log completion
       run: |

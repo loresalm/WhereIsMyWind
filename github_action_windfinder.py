@@ -100,7 +100,9 @@ def create_driver_with_retries(max_retries=3):
     for attempt in range(max_retries):
         try:
             options = Options()
-            options.add_argument('--headless')
+            
+            # Enhanced headless options for stability
+            options.add_argument('--headless=new')  # Use new headless mode
             options.add_argument('--disable-gpu')
             options.add_argument('--no-sandbox')
             options.add_argument('--disable-dev-shm-usage')
@@ -108,20 +110,49 @@ def create_driver_with_retries(max_retries=3):
             options.add_argument('--disable-background-timer-throttling')
             options.add_argument('--disable-backgrounding-occluded-windows')
             options.add_argument('--disable-renderer-backgrounding')
+            options.add_argument('--disable-features=TranslateUI')
+            options.add_argument('--disable-ipc-flooding-protection')
+            
+            # Memory and performance optimization
+            options.add_argument('--max_old_space_size=4096')
+            options.add_argument('--disable-background-networking')
+            options.add_argument('--disable-default-apps')
+            options.add_argument('--disable-sync')
+            
+            # Window and display options
             options.add_argument('--window-size=1920,1080')
+            options.add_argument('--start-maximized')
+            options.add_argument('--disable-infobars')
             
-            # Set timeouts
-            options.add_argument('--timeout=300')
-            options.add_argument('--page-load-strategy=normal')
+            # Security and stability options
+            options.add_argument('--disable-web-security')
+            options.add_argument('--allow-running-insecure-content')
+            options.add_argument('--ignore-certificate-errors')
+            options.add_argument('--ignore-ssl-errors')
+            options.add_argument('--ignore-certificate-errors-spki-list')
             
+            # User agent to avoid detection
+            options.add_argument('--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+            
+            # Crash handling
+            options.add_argument('--disable-crash-reporter')
+            options.add_argument('--crash-dumps-dir=/tmp')
+            
+            # Create temporary user data directory
             user_data_dir = tempfile.mkdtemp()
             options.add_argument(f"--user-data-dir={user_data_dir}")
+            
+            # Set page load strategy to none to avoid hanging
+            options.page_load_strategy = 'none'
 
             driver = webdriver.Chrome(options=options)
             
-            # Set timeouts programmatically as well
-            driver.set_page_load_timeout(300)  # 5 minutes
-            driver.implicitly_wait(30)  # 30 seconds
+            # Set timeouts
+            driver.set_page_load_timeout(60)  # Reduced timeout
+            driver.implicitly_wait(10)  # Reduced implicit wait
+            
+            # Test if driver is working by navigating to a simple page
+            driver.get("about:blank")
             
             print(f"Successfully created Chrome driver on attempt {attempt + 1}")
             return driver
@@ -134,29 +165,71 @@ def create_driver_with_retries(max_retries=3):
 
 
 def load_page_with_retries(driver, url, max_retries=3):
-    """Load a page with retry logic"""
+    """Load a page with retry logic and better error handling"""
     for attempt in range(max_retries):
         try:
             print(f"Attempting to load {url} (attempt {attempt + 1})")
-            driver.get(url)
             
-            # Wait for page to be ready
-            WebDriverWait(driver, 60).until(
-                lambda driver: driver.execute_script("return document.readyState") == "complete"
-            )
+            # First check if driver is still alive
+            try:
+                driver.current_url
+            except Exception as e:
+                print(f"Driver appears to be dead: {e}")
+                raise WebDriverException("Driver session lost")
             
-            print(f"Successfully loaded page on attempt {attempt + 1}")
-            return True
+            # Use execute_script to navigate as it's more reliable
+            driver.execute_script(f"window.location.href = '{url}';")
             
+            # Wait for page to start loading
+            time.sleep(3)
+            
+            # Wait for page to be ready with a shorter timeout
+            max_wait_time = 30
+            start_time = time.time()
+            
+            while time.time() - start_time < max_wait_time:
+                try:
+                    ready_state = driver.execute_script("return document.readyState")
+                    if ready_state == "complete":
+                        break
+                    elif ready_state == "interactive":
+                        # Page is interactive, wait a bit more but don't wait for complete
+                        time.sleep(2)
+                        break
+                    time.sleep(1)
+                except Exception as e:
+                    print(f"Error checking ready state: {e}")
+                    time.sleep(1)
+            
+            # Verify we actually loaded the page
+            current_url = driver.current_url
+            if url.split('/')[-1] in current_url:
+                print(f"Successfully loaded page on attempt {attempt + 1}")
+                return True
+            else:
+                print(f"Page loaded but URL mismatch. Expected: {url}, Got: {current_url}")
+                if attempt == max_retries - 1:
+                    return True  # Accept partial success on last attempt
+                
         except (TimeoutException, WebDriverException) as e:
             print(f"Attempt {attempt + 1} failed: {e}")
             if attempt == max_retries - 1:
                 raise
             time.sleep(10)  # Wait before retry
+            
+            # Try to recover the driver if it seems dead
+            try:
+                driver.current_url
+            except:
+                # Driver is dead, we need to recreate it
+                print("Driver appears dead, will need to recreate...")
+                raise WebDriverException("Driver needs recreation")
 
 
 def main():
     driver = None
+    driver_recreated = False
+    
     try:
         # Create driver with retries
         driver = create_driver_with_retries()
@@ -165,19 +238,63 @@ def main():
         data_date = yesterday.strftime('%Y-%m-%d')
         url = f'https://www.windfinder.com/report/wannsee/{data_date}'
         
-        # Load page with retries
-        load_page_with_retries(driver, url)
+        # Load page with retries and driver recreation if needed
+        max_load_attempts = 2
+        for load_attempt in range(max_load_attempts):
+            try:
+                load_page_with_retries(driver, url)
+                break
+            except WebDriverException as e:
+                if "Driver needs recreation" in str(e) and load_attempt < max_load_attempts - 1:
+                    print("Recreating driver due to failure...")
+                    if driver:
+                        try:
+                            driver.quit()
+                        except:
+                            pass
+                    driver = create_driver_with_retries()
+                    driver_recreated = True
+                else:
+                    raise
         
         # Wait additional time for JavaScript to load
         print("Waiting for page to fully load...")
         time.sleep(10)
 
-        # Wait for the wind chart to be present
-        wait = WebDriverWait(driver, 60)
-        wind_chart = wait.until(
-            EC.presence_of_element_located((By.ID, 'entrypoint-wind-chart'))
-        )
-        print("Wind chart found!")
+        # Try to find the wind chart with multiple selectors
+        chart_selectors = [
+            'entrypoint-wind-chart',
+            'wind-chart',
+            '.wind-chart',
+            '[id*="wind"]',
+            '[class*="chart"]'
+        ]
+        
+        wind_chart = None
+        for selector in chart_selectors:
+            try:
+                if selector.startswith('.') or selector.startswith('['):
+                    wind_chart = WebDriverWait(driver, 10).until(
+                        EC.presence_of_element_located((By.CSS_SELECTOR, selector))
+                    )
+                else:
+                    wind_chart = WebDriverWait(driver, 10).until(
+                        EC.presence_of_element_located((By.ID, selector))
+                    )
+                print(f"Wind chart found with selector: {selector}")
+                break
+            except:
+                continue
+        
+        if not wind_chart:
+            print("Could not find wind chart element. Available elements:")
+            elements = driver.find_elements(By.TAG_NAME, '*')
+            for elem in elements[:20]:  # Print first 20 elements for debugging
+                try:
+                    print(f"Tag: {elem.tag_name}, ID: {elem.get_attribute('id')}, Class: {elem.get_attribute('class')}")
+                except:
+                    pass
+            raise Exception("Wind chart element not found")
         
         # Additional wait for chart to be interactive
         time.sleep(5)
@@ -203,17 +320,27 @@ def main():
                 })
 
         print(f"Collected {len(wind_data_db)} data points")
-  
+        
         # Save to Firestore
         db = initialize_firestore()
         save_to_firestore(db, wind_data_db, data_date, location="wannsee")
 
     except Exception as e:
         print(f"Error in script: {e}")
+        # Print additional debugging information
+        if driver:
+            try:
+                print(f"Current URL: {driver.current_url}")
+                print(f"Page title: {driver.title}")
+            except:
+                print("Could not retrieve driver information")
         raise  # Re-raise the exception to make GitHub Actions aware of the failure
     finally:
         if driver:
-            driver.quit()
+            try:
+                driver.quit()
+            except:
+                pass
         print("Script completed.")
 
 
