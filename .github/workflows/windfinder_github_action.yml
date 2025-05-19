@@ -2,8 +2,8 @@ name: Daily Wind Data Scraper
 
 on:
   schedule:
-    # Runs daily at 1:00 AM UTC (adjust time as needed)
-    - cron: '0 1 * * *'
+    # Runs daily at 5:00 AM UTC (6:00 AM CET/7:00 AM CEST)
+    - cron: '0 5 * * *'
   
   # Allow manual triggering
   workflow_dispatch:
@@ -39,6 +39,7 @@ jobs:
         FIREBASE_CREDENTIALS: ${{ secrets.FIREBASE_CREDENTIALS }}
       run: |
         python github_action_windfinder.py
+      timeout-minutes: 15
     
     - name: Log completion
       run: |
