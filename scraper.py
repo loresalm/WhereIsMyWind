@@ -1,16 +1,16 @@
 import time
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.common.action_chains import ActionChains
+from selenium import webdriver   # type: ignore
+from selenium.webdriver.common.by import By  # type: ignore
+from selenium.webdriver.chrome.options import Options  # type: ignore
+from selenium.webdriver.support.ui import WebDriverWait  # type: ignore
+from selenium.webdriver.support import expected_conditions as EC  # noqa: E501 # type: ignore
+from selenium.webdriver.common.action_chains import ActionChains  # noqa: E501 # type: ignore
 import tempfile
 import os
-import pandas as pd 
+import pandas as pd  # type: ignore
 import re
-import firebase_admin
-from firebase_admin import credentials, firestore
+import firebase_admin  # type: ignore
+from firebase_admin import credentials, firestore  # type: ignore
 from datetime import datetime, timedelta
 
 
@@ -22,7 +22,8 @@ def extract_tooltip_data(tooltip_text):
         data['Day'] = time_match.group(1)  # e.g., "Wednesday"
         data['Time'] = time_match.group(2)  # e.g., "06:00" (as string)
     # Extract wind direction (keep as string)
-    dir_match = re.search(r'Wind direction:\s+(\d+°\s*/\s*[A-Z]+)', tooltip_text)
+    dir_match = re.search(r'Wind direction:\s+(\d+°\s*/\s*[A-Z]+)',
+                          tooltip_text)
     if dir_match:
         data['Wind Direction'] = dir_match.group(1).strip()  # e.g., "280° / W"
     # Extract wind speed (convert to float)
@@ -34,7 +35,7 @@ def extract_tooltip_data(tooltip_text):
             data['Wind Speed (kts)'] = float(speed_str)  # e.g., 5.2
         except ValueError:
             print(f"Could not parse wind speed: {speed_match.group(1)}")
-    
+
     # Extract wind gusts (convert to float)
     gusts_match = re.search(r'Wind gusts:\s+([\d.]+)\s*kts', tooltip_text)
     if gusts_match:
@@ -51,7 +52,8 @@ def extract_tooltip_data(tooltip_text):
 def get_wind_banner(driver, x_start, x_offset, debug):
     # Move to the center of the chart
     actions = ActionChains(driver)
-    actions.move_to_element_with_offset(wind_chart, x_offset + x_start, 0).click().perform() 
+    actions.move_to_element_with_offset(
+        wind_chart, x_offset + x_start, 0).click().perform()
     print(f"Moved to {x_offset + x_start} of wind chart")
 
     # Wait for tooltip to appear
@@ -84,7 +86,7 @@ def get_wind_banner(driver, x_start, x_offset, debug):
 
 # Initialize Firebase Firestore
 def initialize_firestore():
-    cred = credentials.Certificate("serviceAccountKey.json")  # Replace with your JSON file
+    cred = credentials.Certificate("serviceAccountKey.json")
     firebase_admin.initialize_app(cred)
     db = firestore.client()
     return db
@@ -106,11 +108,13 @@ def save_to_firestore(db, all_wind_data, data_date, location="wannsee"):
         # Add data to Firestore
         doc_ref.set(data_to_store)
 
-        print(f"Data for {data_date} saved to Firestore with {len(all_wind_data)} records!")
+        print(f"""Data for {data_date} saved to Firestore
+               with {len(all_wind_data)} records!""")
     except Exception as e:
         print(f"Error saving to Firestore: {e}")
 
-debug = False 
+
+debug = False
 # Selenium setup
 options = Options()
 options.add_argument('--headless')
@@ -127,7 +131,7 @@ driver = webdriver.Chrome(options=options)
 
 yesterday = datetime.now() - timedelta(days=1)
 data_date = yesterday.strftime('%Y-%m-%d')
-# data_date = "2025-05-09"
+data_date = "2025-05-17"
 
 # Open the webpage
 driver.get(f'https://www.windfinder.com/report/wannsee/{data_date}')
@@ -189,9 +193,3 @@ finally:
     # Close the driver
     driver.quit()
     print("Script completed.")
-
-
-
-
-
-
