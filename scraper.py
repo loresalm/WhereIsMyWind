@@ -6,6 +6,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 from requests.exceptions import RequestException
 import logging
+import re
 
 # Configure logging
 logging.basicConfig(
@@ -19,14 +20,27 @@ API_BASE_URL = "https://api.windfinder.com/v2/spots/de575/reports/"
 LOCATION = "wannsee"
 DEFAULT_TIMEOUT = 30  # seconds
 
-def initialize_firestore():
+
+def get_token():
+    url = "https://de.windfinder.com/report/wannsee/2025-05-18"
+    response = requests.get(url)
+    token = re.search(r'window\.API_TOKEN\s*=\s*["\']([^"\']+)["\']', response.text).group(1)
+    print("new token found: ----> ", token)
+    return token
+
+
+def initialize_firestore(local=False):
     if 'FIREBASE_CREDENTIALS' in os.environ:
         cred_dict = json.loads(os.environ['FIREBASE_CREDENTIALS'])
         cred = credentials.Certificate(cred_dict)
     else:
-        cred = credentials.Certificate(".secrets/serviceAccountKey.json")
+        if local:
+            cred = credentials.Certificate("serviceAccountKey.json")
+        else:
+            cred = credentials.Certificate(".secrets/serviceAccountKey.json")
     firebase_admin.initialize_app(cred)
     return firestore.client()
+
 
 def save_to_firestore(db, data, data_date, location=LOCATION):
     """Save wind data to Firestore."""
@@ -45,7 +59,8 @@ def save_to_firestore(db, data, data_date, location=LOCATION):
         logger.error(f"Failed to save data to Firestore: {e}")
         raise
 
-def fetch_wind_data(date):
+
+def fetch_wind_data(date, token):
     """Fetch wind data from Windfinder API."""
     params = {
         "limit": -1,
@@ -55,10 +70,11 @@ def fetch_wind_data(date):
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
         "Accept": "application/json",
-        "wf-api-authorization": "WF-AUTH wfweb:1.0:f7af00b26a99c5998805b06c76d6f78f"
+        "wf-api-authorization": f"WF-AUTH wfweb:1.0:{token}"
     }
 
     try:
+        logger.info("Calling API")
         response = requests.get(
             API_BASE_URL,
             params=params,
@@ -66,7 +82,20 @@ def fetch_wind_data(date):
             timeout=DEFAULT_TIMEOUT
         )
         response.raise_for_status()
-        return response.json().get('items', [])
+        logger.info(f"API response status: {response.status_code}")
+        
+        # Parse response
+        response_data = response.json()
+        
+        # Handle both possible response formats:
+        if isinstance(response_data, list):
+            return response_data  # Directly return the list
+        elif isinstance(response_data, dict):
+            return response_data.get('items', [])  # Return items from dict
+        else:
+            logger.error(f"Unexpected response format: {type(response_data)}")
+            return []
+            
     except RequestException as e:
         logger.error(f"API request failed for date {date}: {e}")
         raise
@@ -74,52 +103,68 @@ def fetch_wind_data(date):
         logger.error(f"Failed to parse API response: {e}")
         raise
 
+
 def transform_data(raw_data):
     """Transform raw API data into our desired format."""
     transformed = []
     for item in raw_data:
         try:
+            # Parse the full timestamp
+            full_time = item.get('dtl', '')
+            if full_time:
+                # Extract just the time portion (HH:MM)
+                time_only = datetime.fromisoformat(full_time).strftime('%H:%M')
+            else:
+                time_only = ''
             transformed.append({
-                'Time': item.get('timestamp', ''),
-                'Wind Direction': f"{item.get('windDirection', 0)}°",
-                'Wind Speed (kts)': round(float(item.get('windSpeed', 0), 1),
-                'Wind Gusts (kts)': round(float(item.get('windGust', 0), 1),
-                'Temperature': item.get('temperature'),
-                'Humidity': item.get('humidity')
+                'Time': time_only,
+                'Wind Direction': f"{item.get('wd', 0)}°",
+                'Wind Speed (kts)': item.get('ws', 0),
+                'Wind Gusts (kts)': item.get('wg', 0),
+                'Temperature': item.get('at')
             })
         except (TypeError, ValueError) as e:
             logger.warning(f"Skipping malformed data item: {e}")
+    print(transformed)
     return transformed
+
 
 def get_processing_date():
     """Determine the date to process (yesterday by default)."""
     return (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
 
+
 def main():
     try:
+        token = get_token()
+
         processing_date = get_processing_date()
         logger.info(f"Starting data collection for {processing_date}")
-        
+
         # Fetch data from API
-        raw_data = fetch_wind_data(processing_date)
+        raw_data = fetch_wind_data(processing_date, token)
         if not raw_data:
             logger.warning("No data received from API")
             return
+        print("got data from API")
 
         # Transform data
         transformed_data = transform_data(raw_data)
         if not transformed_data:
             logger.warning("No valid data after transformation")
             return
-        
+        print("data transformed")
+
         # Save to Firestore
         db = initialize_firestore()
         save_to_firestore(db, transformed_data, processing_date)
-        
+        print("data saved to firebase")
+
         logger.info("Script completed successfully")
     except Exception as e:
         logger.error(f"Script failed: {e}")
         raise SystemExit(1)
+
 
 if __name__ == "__main__":
     main()
