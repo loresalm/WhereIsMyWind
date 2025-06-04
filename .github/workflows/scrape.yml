@@ -2,8 +2,8 @@ name: Wind Data Collector
 
 on:
   schedule:
-    - cron: '0 6 * * *'  # Runs daily at 06:00 UTC (8 AM Berlin time)
-  workflow_dispatch:    # Allows manual triggering
+    - cron: '0 6 * * *'
+  workflow_dispatch:
 
 jobs:
   collect:
@@ -28,5 +28,16 @@ jobs:
           ${{ secrets.FIREBASE_CREDENTIALS }}
           EOF
       
+      - name: List files (for debugging)
+        run: ls -la
+      
       - name: Run collector
-        run: python scrape.py
+        run: |
+          if [ -f "scrape.py" ]; then
+            python scrape.py
+          else
+            echo "Error: scrape.py not found in root directory!"
+            echo "Current directory contents:"
+            ls -la
+            exit 1
+          fi
