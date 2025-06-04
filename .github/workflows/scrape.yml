@@ -24,7 +24,9 @@ jobs:
       - name: Create Firebase service account file
         run: |
           mkdir -p .secrets
-          echo "${{ secrets.FIREBASE_CREDENTIALS }}" > .secrets/serviceAccountKey.json
+          cat << 'EOF' > .secrets/serviceAccountKey.json
+          ${{ secrets.FIREBASE_CREDENTIALS }}
+          EOF
       
       - name: Run collector
         run: python scrape.py
