@@ -29,19 +29,6 @@ def get_token():
     return token
 
 
-def initialize_firestore(local=False):
-    if 'FIREBASE_CREDENTIALS' in os.environ:
-        cred_dict = json.loads(os.environ['FIREBASE_CREDENTIALS'])
-        cred = credentials.Certificate(cred_dict)
-    else:
-        if local:
-            cred = credentials.Certificate("serviceAccountKey.json")
-        else:
-            cred = credentials.Certificate(".secrets/serviceAccountKey.json")
-    firebase_admin.initialize_app(cred)
-    return firestore.client()
-
-
 def save_to_firestore(db, data, data_date, location=LOCATION):
     """Save wind data to Firestore."""
     try:
@@ -55,8 +42,38 @@ def save_to_firestore(db, data, data_date, location=LOCATION):
         }
         doc_ref.set(data_to_store)
         logger.info(f"Successfully saved data for {data_date} with {len(data)} records")
+        return True
     except Exception as e:
-        logger.error(f"Failed to save data to Firestore: {e}")
+        logger.error(f"Failed to save data to Firestore: {str(e)}")
+        logger.error(f"Data being saved: {json.dumps(data_to_store, indent=2)[:500]}...")  # Log first 500 chars
+        logger.error(f"Firestore document path: wind_data/{data_date}")
+        raise
+
+def initialize_firestore(local=False):
+    try:
+        if 'FIREBASE_CREDENTIALS' in os.environ:
+            cred_dict = json.loads(os.environ['FIREBASE_CREDENTIALS'])
+            cred = credentials.Certificate(cred_dict)
+        else:
+            if local:
+                cred = credentials.Certificate("serviceAccountKey.json")
+            else:
+                cred = credentials.Certificate(".secrets/serviceAccountKey.json")
+        
+        # Check if Firebase app already exists
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app(cred)
+        
+        db = firestore.client()
+        
+        # Test connection
+        test_ref = db.collection("test_connection").document("test")
+        test_ref.set({"test": True, "timestamp": datetime.now()})
+        test_ref.delete()
+        
+        return db
+    except Exception as e:
+        logger.error(f"Firestore initialization failed: {str(e)}")
         raise
 
 
