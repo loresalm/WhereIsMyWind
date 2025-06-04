@@ -24,9 +24,12 @@ jobs:
       - name: Create Firebase service account file
         run: |
           mkdir -p .secrets
-          cat << 'EOF' > .secrets/serviceAccountKey.json
-          ${{ secrets.FIREBASE_CREDENTIALS }}
-          EOF
+          echo '${{ secrets.FIREBASE_CREDENTIALS }}' > .secrets/serviceAccountKey.json
+          # Verify the file was created correctly
+          ls -la .secrets/
+          head -n 5 .secrets/serviceAccountKey.json
+          # Validate JSON syntax
+          jq empty .secrets/serviceAccountKey.json || (echo "Invalid JSON!" && exit 1)
       
       - name: List files (for debugging)
         run: ls -la

@@ -49,31 +49,38 @@ def save_to_firestore(db, data, data_date, location=LOCATION):
         logger.error(f"Firestore document path: wind_data/{data_date}")
         raise
 
-def initialize_firestore(local=False):
+def initialize_firestore():
     try:
-        if 'FIREBASE_CREDENTIALS' in os.environ:
-            cred_dict = json.loads(os.environ['FIREBASE_CREDENTIALS'])
-            cred = credentials.Certificate(cred_dict)
-        else:
-            if local:
-                cred = credentials.Certificate("serviceAccountKey.json")
-            else:
-                cred = credentials.Certificate(".secrets/serviceAccountKey.json")
+        # Check both possible locations for the credentials file
+        credential_paths = [
+            ".secrets/serviceAccountKey.json",
+            "serviceAccountKey.json"
+        ]
         
-        # Check if Firebase app already exists
+        cred = None
+        for path in credential_paths:
+            if os.path.exists(path):
+                try:
+                    cred = credentials.Certificate(path)
+                    logger.info(f"Using credentials from {path}")
+                    break
+                except ValueError as e:
+                    logger.warning(f"Invalid credentials in {path}: {e}")
+                    continue
+        
+        if not cred:
+            raise FileNotFoundError("No valid Firebase credentials file found")
+            
+        # Initialize only if not already initialized
         if not firebase_admin._apps:
             firebase_admin.initialize_app(cred)
+            
+        return firestore.client()
         
-        db = firestore.client()
-        
-        # Test connection
-        test_ref = db.collection("test_connection").document("test")
-        test_ref.set({"test": True, "timestamp": datetime.now()})
-        test_ref.delete()
-        
-        return db
     except Exception as e:
-        logger.error(f"Firestore initialization failed: {str(e)}")
+        logger.error(f"Firebase initialization failed: {str(e)}")
+        logger.error("Contents of .secrets directory:")
+        logger.error(os.listdir('.secrets') if os.path.exists('.secrets') else logger.error(".secrets doesn't exist"))
         raise
 
 
