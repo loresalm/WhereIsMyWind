@@ -1,4 +1,4 @@
-# Wind Data Collector
+# Where Is My Wind
 
 ![Project Banner](doc/back.png)
 
