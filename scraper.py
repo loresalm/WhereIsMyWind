@@ -21,6 +21,7 @@ LOCATION = "wannsee"
 DEFAULT_TIMEOUT = 30  # seconds
 
 
+# Extract authentication token from Windfinder website
 def get_token():
     url = "https://de.windfinder.com/report/wannsee/2025-05-18"
     response = requests.get(url)
@@ -29,6 +30,7 @@ def get_token():
     return token
 
 
+# Store wind data records in Firestore database
 def save_to_firestore(db, data, data_date, location=LOCATION):
     """Save wind data to Firestore."""
     try:
@@ -49,6 +51,7 @@ def save_to_firestore(db, data, data_date, location=LOCATION):
         logger.error(f"Firestore document path: wind_data/{data_date}")
         raise
 
+# Set up Firebase connection using service account credentials
 def initialize_firestore():
     try:
         # Check both possible locations for the credentials file
@@ -84,6 +87,7 @@ def initialize_firestore():
         raise
 
 
+# Retrieve wind data from Windfinder API for specified date
 def fetch_wind_data(date, token):
     """Fetch wind data from Windfinder API."""
     params = {
@@ -128,6 +132,7 @@ def fetch_wind_data(date, token):
         raise
 
 
+# Convert raw API data into structured format with time, wind direction, speed, gusts, and temperature
 def transform_data(raw_data):
     """Transform raw API data into our desired format."""
     transformed = []
@@ -153,11 +158,13 @@ def transform_data(raw_data):
     return transformed
 
 
+# Calculate yesterday's date for data processing
 def get_processing_date():
     """Determine the date to process (yesterday by default)."""
     return (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
 
 
+# Main execution function that orchestrates the entire data collection process
 def main():
     try:
         token = get_token()
