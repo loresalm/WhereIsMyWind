@@ -1,12 +1,12 @@
 
 # Where Is My Wind 
-## [WebApp link](https://where-is-my-wind-dashboard.vercel.app/)
+## ** Repository**: https://where-is-my-wind-dashboard.vercel.app/
 
 ![Project Banner](doc/back.png)
 
 A Python-based web scraper that automatically collects wind data from [Windfinder](https://www.windfinder.com/forecast/wannsee) and stores it in a [Firebase](https://firebase.google.com/) Firestore database. The project runs daily using GitHub Actions to maintain a continuous historical record of wind conditions at Wannsee, Berlin.
 
-**🔗 Repository**: https://github.com/loresalm/WhereIsMyWind.git
+** Repository**: https://github.com/loresalm/WhereIsMyWind.git
 
 ## Project Motivation
 
