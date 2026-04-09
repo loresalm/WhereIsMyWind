@@ -1,6 +1,6 @@
 
 # Where Is My Wind 
-## ** Repository**: https://where-is-my-wind-dashboard.vercel.app/
+WebApp: https://where-is-my-wind-dashboard.vercel.app/
 
 ![Project Banner](doc/back.png)
 
